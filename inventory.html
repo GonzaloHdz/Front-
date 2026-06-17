@@ -6,7 +6,7 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Productos - Gestor Inventory</title>
+    <title>Inventario - Gestor Inventory</title>
     <meta name="description" content="Gestor Inventory">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -32,10 +32,10 @@
                     <li>
                         <a href="index.html"><i class="menu-icon fa fa-laptop"></i>Dashboard</a>
                     </li>
-                    <li class="active">
+                    <li>
                         <a href="products.html"><i class="menu-icon fa fa-cube"></i>Productos</a>
                     </li>
-                    <li>
+                    <li class="active">
                         <a href="inventory.html"><i class="menu-icon fa fa-archive"></i>Inventario</a>
                     </li>
                     <li class="menu-title">Extras</li>
@@ -68,10 +68,20 @@
         <div class="breadcrumbs">
             <div class="breadcrumbs-inner">
                 <div class="row m-0">
-                    <div class="col-sm-4">
+                    <div class="col-sm-6">
                         <div class="page-header float-left">
                             <div class="page-title">
-                                <h1>Productos</h1>
+                                <h1>Inventario y Movimientos</h1>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="float-right mt-2">
+                            <div class="input-group">
+                                <input id="inventory-branch-id" type="number" min="1" step="1" class="form-control" value="1" placeholder="Branch ID">
+                                <div class="input-group-append">
+                                    <button id="inventory-reload" class="btn btn-primary" type="button">Cargar sucursal</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -81,41 +91,13 @@
 
         <div class="content">
             <div class="animated fadeIn">
-                <div class="row">
-                    <div class="col-lg-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <strong>Nuevo producto</strong>
-                            </div>
-                            <div class="card-body card-block">
-                                <form id="product-form" novalidate>
-                                    <div id="product-feedback" class="alert d-none" role="alert"></div>
-                                    <div class="form-group">
-                                        <label for="product-sku" class="form-control-label">SKU</label>
-                                        <input type="text" id="product-sku" class="form-control" placeholder="SKU" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="product-name" class="form-control-label">Nombre</label>
-                                        <input type="text" id="product-name" class="form-control" placeholder="Nombre" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="product-category-id" class="form-control-label">Category ID (opcional)</label>
-                                        <input type="number" id="product-category-id" class="form-control" min="1" step="1" placeholder="Category ID">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="product-description" class="form-control-label">Descripción (opcional)</label>
-                                        <textarea id="product-description" class="form-control" rows="3" placeholder="Descripción"></textarea>
-                                    </div>
-                                    <button id="product-submit" type="submit" class="btn btn-success btn-sm btn-block">Guardar producto</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
+                <div id="inventory-feedback" class="alert d-none" role="alert"></div>
 
+                <div class="row">
                     <div class="col-lg-8">
                         <div class="card">
                             <div class="card-header">
-                                <strong>Lista de productos</strong>
+                                <strong>Stock actual por producto</strong>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
@@ -124,13 +106,79 @@
                                             <tr>
                                                 <th>#</th>
                                                 <th>SKU</th>
-                                                <th>Nombre</th>
-                                                <th>Category</th>
-                                                <th>Estado</th>
-                                                <th>Descripción</th>
+                                                <th>Producto</th>
+                                                <th>Stock</th>
+                                                <th>Minimo</th>
+                                                <th>Actualizado</th>
                                             </tr>
                                         </thead>
-                                        <tbody id="products-table-body"></tbody>
+                                        <tbody id="inventory-table-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <strong>Registrar movimiento</strong>
+                            </div>
+                            <div class="card-body card-block">
+                                <form id="movement-form" novalidate>
+                                    <div id="movement-feedback" class="alert d-none" role="alert"></div>
+                                    <div id="movement-warning" class="alert d-none" role="alert"></div>
+
+                                    <div class="form-group">
+                                        <label for="movement-product" class="form-control-label">Producto</label>
+                                        <select id="movement-product" class="form-control"></select>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="movement-type" class="form-control-label">Tipo</label>
+                                        <select id="movement-type" class="form-control">
+                                            <option value="entrada">Entrada</option>
+                                            <option value="salida">Salida</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="movement-quantity" class="form-control-label">Cantidad</label>
+                                        <input id="movement-quantity" type="number" min="1" step="1" class="form-control" placeholder="Cantidad">
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="movement-reference" class="form-control-label">Referencia (opcional)</label>
+                                        <input id="movement-reference" type="text" class="form-control" placeholder="Nota o referencia">
+                                    </div>
+
+                                    <button id="movement-submit" type="submit" class="btn btn-success btn-sm btn-block" disabled>Registrar movimiento</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-lg-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <strong>Ultimos movimientos</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>SKU</th>
+                                                <th>Producto</th>
+                                                <th>Tipo</th>
+                                                <th>Cantidad</th>
+                                                <th>Fecha</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="movements-table-body"></tbody>
                                     </table>
                                 </div>
                             </div>
@@ -165,6 +213,7 @@
     <script src="assets/js/services/http-client.js"></script>
     <script src="assets/js/services/auth.service.js"></script>
     <script src="assets/js/services/products.service.js"></script>
-    <script src="assets/js/pages/products.js"></script>
+    <script src="assets/js/services/inventory.service.js"></script>
+    <script src="assets/js/pages/inventory.js"></script>
 </body>
 </html>

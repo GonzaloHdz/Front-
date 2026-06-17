@@ -11,6 +11,10 @@
             LIST: "/api/products",
             CREATE: "/api/products"
         }),
+        INVENTORY_ENDPOINTS: Object.freeze({
+            LIST: "/api/inventory",
+            MOVEMENTS: "/api/inventory/movements"
+        }),
         STORAGE_KEYS: Object.freeze({
             AUTH_SESSION: "gestor_inventory_auth_session"
         })
