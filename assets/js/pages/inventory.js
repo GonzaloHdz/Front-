@@ -91,6 +91,120 @@
         return !(product.is_active === 0 || product.is_active === false);
     }
 
+    function csvEscape(value) {
+        var text = value === null || typeof value === "undefined" ? "" : String(value);
+        var escaped = text.replace(/"/g, '""');
+        var shouldWrap = escaped.indexOf(",") !== -1 || escaped.indexOf("\n") !== -1 || escaped.indexOf("\r") !== -1 || escaped.indexOf('"') !== -1;
+        return shouldWrap ? '"' + escaped + '"' : escaped;
+    }
+
+    function downloadTextFile(filename, content, mimeType) {
+        var blob = new Blob([content], { type: mimeType || "text/plain;charset=utf-8" });
+        var url = window.URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+    }
+
+    function paginate(items, page, pageSize) {
+        var safeItems = items || [];
+        var safePageSize = Math.max(1, Number(pageSize) || 10);
+        var totalItems = safeItems.length;
+        var totalPages = Math.max(1, Math.ceil(totalItems / safePageSize));
+        var safePage = Math.min(Math.max(1, Number(page) || 1), totalPages);
+        var start = (safePage - 1) * safePageSize;
+        var end = start + safePageSize;
+        return {
+            totalItems: totalItems,
+            totalPages: totalPages,
+            page: safePage,
+            pageSize: safePageSize,
+            items: safeItems.slice(start, end)
+        };
+    }
+
+    function buildPaginationModel(totalPages, currentPage) {
+        var pages = [];
+        var safeTotal = Math.max(1, Number(totalPages) || 1);
+        var safeCurrent = Math.min(Math.max(1, Number(currentPage) || 1), safeTotal);
+
+        if (safeTotal <= 10) {
+            for (var p = 1; p <= safeTotal; p += 1) {
+                pages.push(p);
+            }
+            return pages;
+        }
+
+        pages.push(1);
+        if (safeCurrent > 3) {
+            pages.push("...");
+        }
+
+        var start = Math.max(2, safeCurrent - 1);
+        var end = Math.min(safeTotal - 1, safeCurrent + 1);
+        for (var i = start; i <= end; i += 1) {
+            pages.push(i);
+        }
+
+        if (safeCurrent < safeTotal - 2) {
+            pages.push("...");
+        }
+        pages.push(safeTotal);
+        return pages;
+    }
+
+    function renderPagination(paginationElement, totalItems, pageSize, currentPage) {
+        if (!paginationElement) {
+            return { totalPages: 1, page: 1 };
+        }
+
+        var model = paginate(new Array(totalItems), currentPage, pageSize);
+        var totalPages = model.totalPages;
+        var page = model.page;
+
+        if (totalItems <= model.pageSize) {
+            paginationElement.innerHTML = "";
+            return { totalPages: totalPages, page: page };
+        }
+
+        var parts = [];
+        var pageItems = buildPaginationModel(totalPages, page);
+
+        function li(label, targetPage, isDisabled, isActive) {
+            var classes = ["page-item"];
+            if (isDisabled) {
+                classes.push("disabled");
+            }
+            if (isActive) {
+                classes.push("active");
+            }
+            parts.push('<li class="' + classes.join(" ") + '">');
+            if (targetPage) {
+                parts.push('<a class="page-link" href="#" data-page="' + String(targetPage) + '">' + String(label) + "</a>");
+            } else {
+                parts.push('<span class="page-link">' + String(label) + "</span>");
+            }
+            parts.push("</li>");
+        }
+
+        li("«", Math.max(1, page - 1), page <= 1, false);
+        pageItems.forEach(function (item) {
+            if (item === "...") {
+                li("...", null, true, false);
+                return;
+            }
+            li(String(item), Number(item), false, Number(item) === Number(page));
+        });
+        li("»", Math.min(totalPages, page + 1), page >= totalPages, false);
+
+        paginationElement.innerHTML = parts.join("");
+        return { totalPages: totalPages, page: page };
+    }
+
     function indexProductsById(products) {
         var map = {};
         products.forEach(function (product) {
@@ -132,12 +246,27 @@
         });
     }
 
-    function renderInventory(tableBody, rows) {
+    function filterInventoryData(rows, searchTerm) {
+        var normalizedSearch = String(searchTerm || "").trim().toLowerCase();
+        var activeRows = filterActiveInventoryRows(rows);
+        if (!normalizedSearch) {
+            return activeRows;
+        }
+        return activeRows.filter(function (row) {
+            var skuText = String(row.sku || "").toLowerCase();
+            var nameText = String(row.name || "").toLowerCase();
+            return skuText.indexOf(normalizedSearch) !== -1 || nameText.indexOf(normalizedSearch) !== -1;
+        });
+    }
+
+    function renderInventory(tableBody, rows, page, pageSize) {
         var visibleRows = filterActiveInventoryRows(rows);
+        var pagination = paginate(visibleRows, page, pageSize);
+        var pagedRows = pagination.items;
 
         tableBody.innerHTML = "";
 
-        if (!visibleRows.length) {
+        if (!pagedRows.length) {
             var emptyRow = document.createElement("tr");
             var emptyCell = document.createElement("td");
             emptyCell.colSpan = 7;
@@ -145,10 +274,10 @@
             emptyCell.textContent = "No hay productos o stock registrado para esta sucursal.";
             emptyRow.appendChild(emptyCell);
             tableBody.appendChild(emptyRow);
-            return;
+            return { totalItems: 0, totalPages: 1, page: 1 };
         }
 
-        visibleRows.forEach(function (row, index) {
+        pagedRows.forEach(function (row, index) {
             var tr = document.createElement("tr");
             var stockClass = row.quantity <= row.min_quantity ? "text-danger font-weight-bold" : "";
 
@@ -161,7 +290,7 @@
                 return cell;
             }
 
-            tr.appendChild(td(String(index + 1)));
+            tr.appendChild(td(String(((pagination.page - 1) * pagination.pageSize) + index + 1)));
             tr.appendChild(td(String(row.sku || "")));
             tr.appendChild(td(String(row.name || "")));
             tr.appendChild(td(String(row.quantity), stockClass));
@@ -179,6 +308,7 @@
 
             tableBody.appendChild(tr);
         });
+        return { totalItems: pagination.totalItems, totalPages: pagination.totalPages, page: pagination.page };
     }
 
     function filterInventoryRows(tableBody, searchTerm) {
@@ -278,9 +408,12 @@
         }
     }
 
-    function syncInventoryView(tableBody, searchInput, totalStockElement, alertProductsElement, lastActivityElement, alertsContainerElement, state) {
-        renderInventory(tableBody, state.inventoryRows);
-        filterInventoryRows(tableBody, searchInput ? searchInput.value : "");
+    function syncInventoryView(tableBody, paginationElement, searchInput, totalStockElement, alertProductsElement, lastActivityElement, alertsContainerElement, state) {
+        var searchTerm = searchInput ? searchInput.value : "";
+        var filteredRows = filterInventoryData(state.inventoryRows, searchTerm);
+        var invMeta = renderInventory(tableBody, filteredRows, state.inventoryPage, state.pageSize);
+        var invPager = renderPagination(paginationElement, invMeta.totalItems, state.pageSize, invMeta.page);
+        state.inventoryPage = invPager.page;
         renderDashboardCards(
             totalStockElement,
             alertProductsElement,
@@ -338,10 +471,12 @@
         });
     }
 
-    function renderMovements(tableBody, movements, productMap, currentUserId) {
+    function renderMovements(tableBody, movements, productMap, currentUserId, page, pageSize) {
         tableBody.innerHTML = "";
+        var pagination = paginate(movements || [], page, pageSize);
+        var pagedMovements = pagination.items;
 
-        if (!movements.length) {
+        if (!pagedMovements.length) {
             var emptyRow = document.createElement("tr");
             var emptyCell = document.createElement("td");
             emptyCell.colSpan = 7;
@@ -349,10 +484,10 @@
             emptyCell.textContent = "No hay movimientos registrados.";
             emptyRow.appendChild(emptyCell);
             tableBody.appendChild(emptyRow);
-            return;
+            return { totalItems: 0, totalPages: 1, page: 1 };
         }
 
-        movements.forEach(function (movement) {
+        pagedMovements.forEach(function (movement) {
             var product = productMap[String(movement.product_id)] || null;
             var tr = document.createElement("tr");
 
@@ -371,6 +506,7 @@
             tr.appendChild(td(formatMovementDate(movement.created_at)));
             tableBody.appendChild(tr);
         });
+        return { totalItems: pagination.totalItems, totalPages: pagination.totalPages, page: pagination.page };
     }
 
     function renderProductOptions(select, products) {
@@ -400,6 +536,9 @@
         var reloadButton = document.getElementById("inventory-reload");
         var inventoryBody = document.getElementById("inventory-table-body");
         var movementsBody = document.getElementById("movements-table-body");
+        var inventoryPagination = document.getElementById("inventory-pagination");
+        var movementsPagination = document.getElementById("movements-pagination");
+        var exportCsvButton = document.getElementById("export-inventory-csv");
         var movementForm = document.getElementById("movement-form");
         var movementFeedback = document.getElementById("movement-feedback");
         var movementWarning = document.getElementById("movement-warning");
@@ -427,6 +566,9 @@
             inventoryRows: [],
             movements: [],
             movementsFilter: "all",
+            inventoryPage: 1,
+            movementsPage: 1,
+            pageSize: 10,
             submitting: false,
             currentUserId: null,
             pendingDeactivateProductId: null
@@ -517,7 +659,9 @@
 
             renderProductOptions(productSelect, state.products);
             renderInventory(inventoryBody, []);
-            renderMovements(movementsBody, filterMovementsByType([], state.movementsFilter), state.productMap, state.currentUserId);
+            renderMovements(movementsBody, filterMovementsByType([], state.movementsFilter), state.productMap, state.currentUserId, state.movementsPage, state.pageSize);
+            renderPagination(inventoryPagination, 0, state.pageSize, state.inventoryPage);
+            renderPagination(movementsPagination, 0, state.pageSize, state.movementsPage);
             state.inventoryRows = [];
             state.movements = [];
             renderDashboardCards(totalStockCard, alertProductsCard, lastActivityCard, liveAlertsContainer, state.inventoryRows, state.movements);
@@ -542,7 +686,9 @@
                 pageFeedback.classList.remove("d-none");
                 renderProductOptions(productSelect, state.products);
                 renderInventory(inventoryBody, []);
-                renderMovements(movementsBody, filterMovementsByType([], state.movementsFilter), {}, state.currentUserId);
+                renderMovements(movementsBody, filterMovementsByType([], state.movementsFilter), {}, state.currentUserId, state.movementsPage, state.pageSize);
+                renderPagination(inventoryPagination, 0, state.pageSize, state.inventoryPage);
+                renderPagination(movementsPagination, 0, state.pageSize, state.movementsPage);
                 renderDashboardCards(totalStockCard, alertProductsCard, lastActivityCard, liveAlertsContainer, [], []);
                 submitButton.disabled = true;
                 return Promise.resolve();
@@ -563,16 +709,18 @@
                     state.inventoryRows = mergeInventory(state.products, results[0] || []);
                     state.movements = results[1] || [];
 
-                    syncInventoryView(
-                        inventoryBody,
-                        searchProductInput,
-                        totalStockCard,
-                        alertProductsCard,
-                        lastActivityCard,
-                        liveAlertsContainer,
-                        state
-                    );
-                    renderMovements(movementsBody, filterMovementsByType(state.movements, state.movementsFilter), state.productMap, state.currentUserId);
+                    var searchTerm = searchProductInput ? searchProductInput.value : "";
+                    var filteredRows = filterInventoryData(state.inventoryRows, searchTerm);
+                    var invMeta = renderInventory(inventoryBody, filteredRows, state.inventoryPage, state.pageSize);
+                    var invPager = renderPagination(inventoryPagination, invMeta.totalItems, state.pageSize, invMeta.page);
+                    state.inventoryPage = invPager.page;
+
+                    var filteredMovements = filterMovementsByType(state.movements, state.movementsFilter);
+                    var movMeta = renderMovements(movementsBody, filteredMovements, state.productMap, state.currentUserId, state.movementsPage, state.pageSize);
+                    var movPager = renderPagination(movementsPagination, movMeta.totalItems, state.pageSize, movMeta.page);
+                    state.movementsPage = movPager.page;
+
+                    renderDashboardCards(totalStockCard, alertProductsCard, lastActivityCard, liveAlertsContainer, state.inventoryRows, state.movements);
 
                     if (!state.products.length) {
                         setFeedback(pageFeedback, "warning", "No hay productos creados. Crea productos antes de registrar movimientos.");
@@ -605,7 +753,11 @@
 
         if (searchProductInput) {
             searchProductInput.addEventListener("input", function () {
-                filterInventoryRows(inventoryBody, searchProductInput.value);
+                state.inventoryPage = 1;
+                var filteredRows = filterInventoryData(state.inventoryRows, searchProductInput.value);
+                var invMeta = renderInventory(inventoryBody, filteredRows, state.inventoryPage, state.pageSize);
+                var invPager = renderPagination(inventoryPagination, invMeta.totalItems, state.pageSize, invMeta.page);
+                state.inventoryPage = invPager.page;
             });
         }
 
@@ -618,10 +770,85 @@
                 }
                 filterValue = button.getAttribute("data-filter") || "all";
                 state.movementsFilter = filterValue;
+                state.movementsPage = 1;
                 setActiveFilterButton(movementsFilterGroup, state.movementsFilter);
-                renderMovements(movementsBody, filterMovementsByType(state.movements, state.movementsFilter), state.productMap, state.currentUserId);
+                var filteredMovements = filterMovementsByType(state.movements, state.movementsFilter);
+                var movMeta = renderMovements(movementsBody, filteredMovements, state.productMap, state.currentUserId, state.movementsPage, state.pageSize);
+                var movPager = renderPagination(movementsPagination, movMeta.totalItems, state.pageSize, movMeta.page);
+                state.movementsPage = movPager.page;
             });
             setActiveFilterButton(movementsFilterGroup, state.movementsFilter);
+        }
+
+        if (inventoryPagination) {
+            inventoryPagination.addEventListener("click", function (event) {
+                var link = event.target.closest("a[data-page]");
+                var page;
+                if (!link) {
+                    return;
+                }
+                event.preventDefault();
+                page = parsePositiveInt(link.getAttribute("data-page"));
+                if (!page) {
+                    return;
+                }
+                state.inventoryPage = page;
+                var searchTerm = searchProductInput ? searchProductInput.value : "";
+                var filteredRows = filterInventoryData(state.inventoryRows, searchTerm);
+                var invMeta = renderInventory(inventoryBody, filteredRows, state.inventoryPage, state.pageSize);
+                var invPager = renderPagination(inventoryPagination, invMeta.totalItems, state.pageSize, invMeta.page);
+                state.inventoryPage = invPager.page;
+            });
+        }
+
+        if (movementsPagination) {
+            movementsPagination.addEventListener("click", function (event) {
+                var link = event.target.closest("a[data-page]");
+                var page;
+                if (!link) {
+                    return;
+                }
+                event.preventDefault();
+                page = parsePositiveInt(link.getAttribute("data-page"));
+                if (!page) {
+                    return;
+                }
+                state.movementsPage = page;
+                var filteredMovements = filterMovementsByType(state.movements, state.movementsFilter);
+                var movMeta = renderMovements(movementsBody, filteredMovements, state.productMap, state.currentUserId, state.movementsPage, state.pageSize);
+                var movPager = renderPagination(movementsPagination, movMeta.totalItems, state.pageSize, movMeta.page);
+                state.movementsPage = movPager.page;
+            });
+        }
+
+        if (exportCsvButton) {
+            exportCsvButton.addEventListener("click", function () {
+                var branchId = getCurrentBranchId() || 0;
+                var rows = filterActiveInventoryRows(state.inventoryRows).slice();
+                rows.sort(function (a, b) {
+                    var skuA = String(a.sku || "").toLowerCase();
+                    var skuB = String(b.sku || "").toLowerCase();
+                    if (skuA < skuB) return -1;
+                    if (skuA > skuB) return 1;
+                    return 0;
+                });
+
+                var lines = [];
+                lines.push(["sku", "name", "quantity", "min_quantity", "updated_at"].map(csvEscape).join(","));
+                rows.forEach(function (row) {
+                    lines.push([
+                        row.sku || "",
+                        row.name || "",
+                        Number(row.quantity || 0),
+                        Number(row.min_quantity || 0),
+                        formatTimestamp(row.updated_at)
+                    ].map(csvEscape).join(","));
+                });
+
+                var stamp = new Date().toISOString().slice(0, 10);
+                var filename = "inventory_branch_" + String(branchId) + "_" + stamp + ".csv";
+                downloadTextFile(filename, lines.join("\n"), "text/csv;charset=utf-8");
+            });
         }
 
         inventoryBody.addEventListener("click", function (event) {
@@ -674,6 +901,7 @@
 
                         syncInventoryView(
                             inventoryBody,
+                            inventoryPagination,
                             searchProductInput,
                             totalStockCard,
                             alertProductsCard,

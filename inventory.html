@@ -155,6 +155,9 @@
                                 <div class="form-group">
                                     <input id="search-product-input" type="text" class="form-control" placeholder="Buscar por SKU o nombre del producto">
                                 </div>
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button id="export-inventory-csv" type="button" class="btn btn-sm btn-outline-success">Exportar CSV</button>
+                                </div>
                                 <div class="table-responsive">
                                     <table class="table table-striped">
                                         <thead>
@@ -171,6 +174,9 @@
                                         <tbody id="inventory-table-body"></tbody>
                                     </table>
                                 </div>
+                                <nav aria-label="Paginacion de inventario" class="d-flex justify-content-end">
+                                    <ul id="inventory-pagination" class="pagination pagination-sm mb-0"></ul>
+                                </nav>
                             </div>
                         </div>
                     </div>
@@ -245,6 +251,9 @@
                                         <tbody id="movements-table-body"></tbody>
                                     </table>
                                 </div>
+                                <nav aria-label="Paginacion de movimientos" class="d-flex justify-content-end">
+                                    <ul id="movements-pagination" class="pagination pagination-sm mb-0"></ul>
+                                </nav>
                             </div>
                         </div>
                     </div>
