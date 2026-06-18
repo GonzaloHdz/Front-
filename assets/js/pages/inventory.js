@@ -113,6 +113,90 @@
         });
     }
 
+    function filterInventoryRows(tableBody, searchTerm) {
+        var normalizedSearch = String(searchTerm || "").trim().toLowerCase();
+        var rows = tableBody ? tableBody.querySelectorAll("tr") : [];
+
+        Array.prototype.forEach.call(rows, function (row) {
+            var cells = row.getElementsByTagName("td");
+            if (cells.length < 3) {
+                row.style.display = "";
+                return;
+            }
+
+            var skuText = String(cells[1].textContent || "").toLowerCase();
+            var nameText = String(cells[2].textContent || "").toLowerCase();
+            var matches = !normalizedSearch || skuText.indexOf(normalizedSearch) !== -1 || nameText.indexOf(normalizedSearch) !== -1;
+
+            row.style.display = matches ? "" : "none";
+        });
+    }
+
+    function calculateDashboardMetrics(rows, movements) {
+        var totalStock = 0;
+        var alertProducts = 0;
+        var lastActivity = null;
+
+        rows.forEach(function (row) {
+            var quantity = Number(row.quantity || 0);
+            var minQuantity = Number(row.min_quantity || 0);
+            var updatedAt = Number(row.updated_at || 0);
+
+            totalStock += quantity;
+
+            if (quantity <= minQuantity) {
+                alertProducts += 1;
+            }
+
+            if (updatedAt && (!lastActivity || updatedAt > lastActivity)) {
+                lastActivity = updatedAt;
+            }
+        });
+
+        movements.forEach(function (movement) {
+            var createdAt = Number(movement.created_at || 0);
+            if (createdAt && (!lastActivity || createdAt > lastActivity)) {
+                lastActivity = createdAt;
+            }
+        });
+
+        return {
+            totalStock: totalStock,
+            alertProducts: alertProducts,
+            lastActivity: lastActivity
+        };
+    }
+
+    function renderDashboardCards(totalStockElement, alertProductsElement, lastActivityElement, alertsContainerElement, rows, movements) {
+        var metrics = calculateDashboardMetrics(rows, movements);
+
+        if (totalStockElement) {
+            totalStockElement.textContent = String(metrics.totalStock);
+        }
+
+        if (alertProductsElement) {
+            alertProductsElement.textContent = String(metrics.alertProducts);
+        }
+
+        if (lastActivityElement) {
+            lastActivityElement.textContent = metrics.lastActivity ? formatTimestamp(metrics.lastActivity) : "-";
+        }
+
+        if (alertsContainerElement) {
+            if (metrics.alertProducts > 0) {
+                alertsContainerElement.innerHTML = [
+                    '<div class="alert alert-danger" role="alert">',
+                    "Atencion: Tienes ",
+                    String(metrics.alertProducts),
+                    " productos con stock criticamente bajo. Por favor, verifica los niveles en la tabla inferior.",
+                    "</div>"
+                ].join("");
+            } else {
+                alertsContainerElement.innerHTML = "";
+            }
+        }
+    }
+
     function renderMovements(tableBody, movements, productMap) {
         tableBody.innerHTML = "";
 
@@ -182,6 +266,11 @@
         var quantityInput = document.getElementById("movement-quantity");
         var referenceInput = document.getElementById("movement-reference");
         var submitButton = document.getElementById("movement-submit");
+        var totalStockCard = document.getElementById("total-stock-card");
+        var alertProductsCard = document.getElementById("alert-products-card");
+        var lastActivityCard = document.getElementById("last-activity-card");
+        var liveAlertsContainer = document.getElementById("live-alerts-container");
+        var searchProductInput = document.getElementById("search-product-input");
 
         if (!pageFeedback || !branchIdInput || !reloadButton || !inventoryBody || !movementsBody || !movementForm || !movementFeedback || !movementWarning || !productSelect || !typeSelect || !quantityInput || !referenceInput || !submitButton) {
             return;
@@ -259,6 +348,7 @@
             renderMovements(movementsBody, [], state.productMap);
             state.inventoryRows = [];
             state.movements = [];
+            renderDashboardCards(totalStockCard, alertProductsCard, lastActivityCard, liveAlertsContainer, state.inventoryRows, state.movements);
 
             if (error && error.status === 404) {
                 setFeedback(pageFeedback, "danger", "La sucursal indicada no existe en el backend.");
@@ -281,6 +371,7 @@
                 renderProductOptions(productSelect, state.products);
                 renderInventory(inventoryBody, []);
                 renderMovements(movementsBody, [], {});
+                renderDashboardCards(totalStockCard, alertProductsCard, lastActivityCard, liveAlertsContainer, [], []);
                 submitButton.disabled = true;
                 return Promise.resolve();
             }
@@ -301,7 +392,9 @@
                     state.movements = results[1] || [];
 
                     renderInventory(inventoryBody, state.inventoryRows);
+                    filterInventoryRows(inventoryBody, searchProductInput ? searchProductInput.value : "");
                     renderMovements(movementsBody, state.movements, state.productMap);
+                    renderDashboardCards(totalStockCard, alertProductsCard, lastActivityCard, liveAlertsContainer, state.inventoryRows, state.movements);
 
                     if (!state.products.length) {
                         setFeedback(pageFeedback, "warning", "No hay productos creados. Crea productos antes de registrar movimientos.");
@@ -327,6 +420,12 @@
         reloadButton.addEventListener("click", function () {
             loadPageData();
         });
+
+        if (searchProductInput) {
+            searchProductInput.addEventListener("input", function () {
+                filterInventoryRows(inventoryBody, searchProductInput.value);
+            });
+        }
 
         branchIdInput.addEventListener("input", validateMovementForm);
         productSelect.addEventListener("change", validateMovementForm);

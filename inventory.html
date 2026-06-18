@@ -94,12 +94,67 @@
                 <div id="inventory-feedback" class="alert d-none" role="alert"></div>
 
                 <div class="row">
+                    <div class="col-12 col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <div class="text-muted text-uppercase small">Stock total (sucursal)</div>
+                                        <div class="h2 mb-0" id="total-stock-card">0</div>
+                                    </div>
+                                    <div class="text-primary">
+                                        <i class="fa fa-cubes fa-2x" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <div class="text-muted text-uppercase small">Productos en alerta</div>
+                                        <div class="h2 mb-0" id="alert-products-card">0</div>
+                                    </div>
+                                    <div class="text-warning">
+                                        <i class="fa fa-exclamation-triangle fa-2x" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <div class="text-muted text-uppercase small">Última actividad</div>
+                                        <div class="h5 mb-0" id="last-activity-card">-</div>
+                                    </div>
+                                    <div class="text-success">
+                                        <i class="fa fa-clock-o fa-2x" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="live-alerts-container"></div>
+
+                <div class="row">
                     <div class="col-lg-8">
                         <div class="card">
                             <div class="card-header">
                                 <strong>Stock actual por producto</strong>
                             </div>
                             <div class="card-body">
+                                <div class="form-group">
+                                    <input id="search-product-input" type="text" class="form-control" placeholder="Buscar por SKU o nombre del producto">
+                                </div>
                                 <div class="table-responsive">
                                     <table class="table table-striped">
                                         <thead>
