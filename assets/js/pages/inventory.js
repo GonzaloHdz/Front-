@@ -247,12 +247,38 @@
             }
         }
 
+        function handleLoadError(error) {
+            if (error && (error.status === 401 || error.status === 403)) {
+                window.authService.clearSession();
+                redirectToLogin();
+                return;
+            }
+
+            renderProductOptions(productSelect, state.products);
+            renderInventory(inventoryBody, []);
+            renderMovements(movementsBody, [], state.productMap);
+            state.inventoryRows = [];
+            state.movements = [];
+
+            if (error && error.status === 404) {
+                setFeedback(pageFeedback, "danger", "La sucursal indicada no existe en el backend.");
+            } else if (state.products.length) {
+                setFeedback(pageFeedback, "warning", "Se cargaron los productos, pero no fue posible cargar inventario o movimientos.");
+            } else {
+                setFeedback(pageFeedback, "danger", "No fue posible cargar productos, inventario o movimientos.");
+            }
+
+            pageFeedback.classList.remove("d-none");
+            validateMovementForm();
+        }
+
         function loadPageData() {
             var branchId = getCurrentBranchId();
 
             if (!branchId) {
                 setFeedback(pageFeedback, "danger", "Ingresa un Branch ID valido para consultar inventario.");
                 pageFeedback.classList.remove("d-none");
+                renderProductOptions(productSelect, state.products);
                 renderInventory(inventoryBody, []);
                 renderMovements(movementsBody, [], {});
                 submitButton.disabled = true;
@@ -262,44 +288,32 @@
             setFeedback(pageFeedback, "info", "Cargando inventario y movimientos...");
             pageFeedback.classList.remove("d-none");
 
-            return Promise.all([
-                window.productsService.listProducts(),
-                window.inventoryService.listInventory(branchId),
-                window.inventoryService.listMovements(branchId, 20)
-            ]).then(function (results) {
-                state.products = results[0] || [];
+            return window.productsService.listProducts().then(function (products) {
+                state.products = products || [];
                 state.productMap = indexProductsById(state.products);
-                state.inventoryRows = mergeInventory(state.products, results[1] || []);
-                state.movements = results[2] || [];
-
                 renderProductOptions(productSelect, state.products);
-                renderInventory(inventoryBody, state.inventoryRows);
-                renderMovements(movementsBody, state.movements, state.productMap);
 
-                if (!state.products.length) {
-                    setFeedback(pageFeedback, "warning", "No hay productos creados. Crea productos antes de registrar movimientos.");
-                    pageFeedback.classList.remove("d-none");
-                } else {
-                    pageFeedback.classList.add("d-none");
-                }
+                return Promise.all([
+                    window.inventoryService.listInventory(branchId),
+                    window.inventoryService.listMovements(branchId, 20)
+                ]).then(function (results) {
+                    state.inventoryRows = mergeInventory(state.products, results[0] || []);
+                    state.movements = results[1] || [];
 
-                validateMovementForm();
+                    renderInventory(inventoryBody, state.inventoryRows);
+                    renderMovements(movementsBody, state.movements, state.productMap);
+
+                    if (!state.products.length) {
+                        setFeedback(pageFeedback, "warning", "No hay productos creados. Crea productos antes de registrar movimientos.");
+                        pageFeedback.classList.remove("d-none");
+                    } else {
+                        pageFeedback.classList.add("d-none");
+                    }
+
+                    validateMovementForm();
+                });
             }).catch(function (error) {
-                if (error && (error.status === 401 || error.status === 403)) {
-                    window.authService.clearSession();
-                    redirectToLogin();
-                    return;
-                }
-
-                if (error && error.status === 404) {
-                    setFeedback(pageFeedback, "danger", "La sucursal indicada no existe en el backend.");
-                } else {
-                    setFeedback(pageFeedback, "danger", "No fue posible cargar inventario o movimientos.");
-                }
-                pageFeedback.classList.remove("d-none");
-                renderInventory(inventoryBody, []);
-                renderMovements(movementsBody, [], {});
-                validateMovementForm();
+                handleLoadError(error);
             });
         }
 
