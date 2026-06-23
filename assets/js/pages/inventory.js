@@ -40,6 +40,65 @@
         return map;
     }
 
+    function getBranchStorageKey() {
+        return "gestor_inventory_active_branch_id";
+    }
+
+    function getStoredBranchId() {
+        var rawValue = null;
+        try {
+            rawValue = window.sessionStorage.getItem(getBranchStorageKey()) || window.localStorage.getItem(getBranchStorageKey());
+        } catch (error) {
+            return null;
+        }
+        return parsePositiveInt(rawValue);
+    }
+
+    function saveActiveBranchId(branchId) {
+        try {
+            window.sessionStorage.setItem(getBranchStorageKey(), String(branchId));
+            window.localStorage.setItem(getBranchStorageKey(), String(branchId));
+        } catch (error) {
+        }
+    }
+
+    function getBranchRequestHeaders() {
+        var token = null;
+        var headers = {
+            "Content-Type": "application/json"
+        };
+
+        if (window.authService && window.authService.getAccessToken) {
+            token = window.authService.getAccessToken();
+        }
+
+        if (!token) {
+            try {
+                token = window.localStorage.getItem("token") || window.sessionStorage.getItem("token");
+            } catch (error) {
+                token = null;
+            }
+        }
+
+        if (token) {
+            headers.Authorization = "Bearer " + token;
+        }
+
+        return headers;
+    }
+
+    function fetchCompanyBranches() {
+        return window.httpClient.request(window.APP_CONFIG.COMPANY_ENDPOINTS.BRANCHES, {
+            method: "GET",
+            headers: getBranchRequestHeaders()
+        }).then(function (data) {
+            return data && data.branches ? data.branches : [];
+        }).catch(function (error) {
+            console.error("Error cargando sucursales:", error);
+            throw error;
+        });
+    }
+
     function mergeInventory(products, items) {
         var itemMap = {};
         var rows = [];
@@ -192,7 +251,9 @@
             productMap: {},
             inventoryRows: [],
             movements: [],
-            submitting: false
+            submitting: false,
+            branches: [],
+            activeBranch: null
         };
 
         pageFeedback.classList.add("d-none");
@@ -201,6 +262,31 @@
 
         function getCurrentBranchId() {
             return parsePositiveInt(branchIdInput.value);
+        }
+
+        function resolveActiveBranch(branches) {
+            var storedBranchId = getStoredBranchId();
+            var selectedBranch = null;
+
+            if (!branches.length) {
+                return null;
+            }
+
+            if (storedBranchId) {
+                branches.forEach(function (branch) {
+                    if (!selectedBranch && Number(branch.id) === Number(storedBranchId) && Number(branch.is_active ? 1 : 0) === 1) {
+                        selectedBranch = branch;
+                    }
+                });
+            }
+
+            if (!selectedBranch) {
+                selectedBranch = branches.filter(function (branch) {
+                    return Number(branch.is_active ? 1 : 0) === 1;
+                })[0] || branches[0];
+            }
+
+            return selectedBranch || null;
         }
 
         function getCurrentStock(productId) {
@@ -318,14 +404,65 @@
         }
 
         window.authService.fetchProfile().then(function () {
+            return initializeBranchContext();
+        }).then(function (branchId) {
+            if (!branchId) {
+                return null;
+            }
             return loadPageData();
-        }).catch(function () {
-            window.authService.clearSession();
-            redirectToLogin();
+        }).catch(function (error) {
+            console.error("Error inicializando inventario:", error);
+            if (pageFeedback) {
+                setFeedback(pageFeedback, "danger", "No fue posible cargar las sucursales o el perfil. Revisa la consola para ver el error real del servidor.");
+                pageFeedback.classList.remove("d-none");
+            }
+            renderInventory(inventoryBody, []);
+            renderMovements(movementsBody, [], state.productMap);
+            submitButton.disabled = true;
         });
 
+        function initializeBranchContext() {
+            return fetchCompanyBranches().then(function (branches) {
+                state.branches = branches || [];
+                state.activeBranch = resolveActiveBranch(state.branches);
+
+                if (!state.activeBranch) {
+                    setFeedback(pageFeedback, "danger", "No existe una sucursal activa para esta empresa. Completa el onboarding o verifica el backend.");
+                    pageFeedback.classList.remove("d-none");
+                    branchIdInput.value = "";
+                    reloadButton.disabled = true;
+                    submitButton.disabled = true;
+                    renderInventory(inventoryBody, []);
+                    renderMovements(movementsBody, [], state.productMap);
+                    return null;
+                }
+
+                branchIdInput.value = String(state.activeBranch.id);
+                branchIdInput.readOnly = true;
+                reloadButton.disabled = false;
+                saveActiveBranchId(state.activeBranch.id);
+                setFeedback(pageFeedback, "info", "Sucursal activa detectada: " + String(state.activeBranch.name || ("#" + state.activeBranch.id)));
+                pageFeedback.classList.remove("d-none");
+                return state.activeBranch.id;
+            }).catch(function (error) {
+                console.error("Error cargando sucursales:", error);
+                setFeedback(pageFeedback, "danger", "No fue posible cargar las sucursales de la empresa. Revisa la consola para inspeccionar la respuesta del servidor.");
+                pageFeedback.classList.remove("d-none");
+                branchIdInput.value = "";
+                reloadButton.disabled = true;
+                submitButton.disabled = true;
+                renderInventory(inventoryBody, []);
+                renderMovements(movementsBody, [], state.productMap);
+                return null;
+            });
+        }
+
         reloadButton.addEventListener("click", function () {
-            loadPageData();
+            initializeBranchContext().then(function (branchId) {
+                if (branchId) {
+                    loadPageData();
+                }
+            });
         });
 
         branchIdInput.addEventListener("input", validateMovementForm);

@@ -5,7 +5,16 @@
         API_BASE_URL: "http://127.0.0.1:8000",
         AUTH_ENDPOINTS: Object.freeze({
             LOGIN: "/api/auth/login",
-            ME: "/api/auth/me"
+            ME: "/api/auth/me",
+            REGISTER_COMPANY: "/api/auth/register-company"
+        }),
+        COMPANY_ENDPOINTS: Object.freeze({
+            DETAILS: "/api/company/details",
+            REGISTER: "/api/company/register",
+            BRANCHES: "/api/company/branches"
+        }),
+        USER_ENDPOINTS: Object.freeze({
+            PROFILE: "/api/user/profile"
         }),
         PRODUCTS_ENDPOINTS: Object.freeze({
             LIST: "/api/products",

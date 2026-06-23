@@ -7,8 +7,8 @@
     }
 
     function parseCompanyId(value) {
-        var parsed = Number(value);
-        return isFinite(parsed) && Math.floor(parsed) === parsed && parsed > 0 ? parsed : null;
+        var parsed = parseInt(value, 10);
+        return isFinite(parsed) && parsed > 0 ? parsed : null;
     }
 
     function setSubmitting(button, isSubmitting) {
@@ -20,7 +20,7 @@
         var form = document.getElementById("login-form");
         var feedback = document.getElementById("login-feedback");
         var submitButton = document.getElementById("login-submit");
-        var companyIdInput = document.getElementById("company-id");
+        var companyIdInput = document.getElementById("login-company-id");
         var emailInput = document.getElementById("login-email");
         var passwordInput = document.getElementById("login-password");
         var rememberSessionInput = document.getElementById("remember-session");
@@ -62,11 +62,22 @@
                 company_id: companyId,
                 email: email,
                 password: password
-            }, rememberSession).then(function () {
-                setFeedback(feedback, "success", "Inicio de sesion exitoso. Redirigiendo al dashboard...");
+            }, rememberSession).then(function (session) {
+                setFeedback(feedback, "info", "Sesion iniciada. Verificando datos corporativos...");
+                return window.authService.fetchCompanyDetails(session.company_id).then(function (companyDetails) {
+                    return {
+                        redirectUrl: window.authService.isCompanyProfileComplete(companyDetails)
+                            ? "profile.html"
+                            : "company-onboarding.html"
+                    };
+                }).catch(function () {
+                    return { redirectUrl: "profile.html" };
+                });
+            }).then(function (result) {
+                setFeedback(feedback, "success", "Inicio de sesion exitoso. Redirigiendo...");
                 setSubmitting(submitButton, false);
                 window.setTimeout(function () {
-                    window.location.href = "index.html";
+                    window.location.href = result.redirectUrl;
                 }, 900);
             }).catch(function (error) {
                 var apiError = error && error.data && error.data.error;
